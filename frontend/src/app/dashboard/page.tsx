@@ -1,0 +1,157 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { useRouter } from 'next/navigation';
+import { RootState } from '@/lib/store';
+import { initAuth } from '@/lib/store/authSlice';
+import Navbar from '@/components/Navbar';
+import TaskForm from '@/components/TaskForm';
+import { 
+  useGetTasksQuery, 
+  useDeleteTaskMutation, 
+  useToggleTaskMutation 
+} from '@/lib/store/taskApi';
+import { Modal } from 'react-bootstrap';
+
+export default function Dashboard() {
+  const router = useRouter();
+  const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [showModal, setShowModal] = useState(false);
+  const [editTask, setEditTask] = useState<any>(null);
+
+  const { data, isLoading, refetch } = useGetTasksQuery({ search, status, page }, { skip: !isAuthenticated });
+  const [deleteTask] = useDeleteTaskMutation();
+  const [toggleTask] = useToggleTaskMutation();
+
+  useEffect(() => {
+    dispatch(initAuth());
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!isAuthenticated && typeof window !== 'undefined' && !localStorage.getItem('accessToken')) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, router]);
+
+  if (!isAuthenticated) return null;
+
+  return (
+    <div className="min-vh-100 pb-5">
+      <Navbar />
+      
+      <div className="container">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-5 mt-4">
+          <div>
+            <h1 className="fw-bold mb-1 text-white" style={{ fontFamily: 'Outfit' }}>Your Pipeline</h1>
+            <p className="text-secondary mb-0">Stay organized and productive with QuantumTask.</p>
+          </div>
+          <button className="btn btn-primary px-4 fw-bold shadow-sm" onClick={() => { setEditTask(null); setShowModal(true); }}>
+            + Create New Task
+          </button>
+        </div>
+
+        <div className="glass-card p-4 mb-4 border-primary border-opacity-10">
+          <div className="row g-3 align-items-center">
+            <div className="col-md-6">
+              <input 
+                className="form-control" 
+                placeholder="Search tasks by title..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="col-md-4">
+              <select className="form-control" value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">All Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="COMPLETED">Completed</option>
+              </select>
+            </div>
+            <div className="col-md-2">
+               <button className="btn btn-outline-primary w-100 fw-bold border-0" onClick={() => refetch()} style={{ background: 'rgba(99, 102, 241, 0.1)' }}>Refetch</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="row g-4">
+          {isLoading ? (
+            <div className="col-12 text-center py-5">
+              <div className="spinner-border text-primary" style={{ width: '3rem', height: '3rem' }} />
+            </div>
+          ) : data?.tasks.length > 0 ? (
+            data.tasks.map((task: any) => (
+              <div className="col-12 col-lg-6 animate-fade-in" key={task.id}>
+                <div className="glass-card p-4 h-100 d-flex flex-column shadow-hover transition-standard">
+                  <div className="d-flex justify-content-between align-items-start mb-3">
+                    <div className="flex-grow-1 pe-3">
+                      <h4 className={`fw-bold mb-2 ${task.status === 'COMPLETED' ? 'text-decoration-line-through opacity-50' : ''}`}>
+                        {task.title}
+                      </h4>
+                      <p className="text-secondary small mb-0">{task.description || 'No additional details.'}</p>
+                    </div>
+                    <span className={`badge ${task.status === 'COMPLETED' ? 'bg-success text-white' : 'bg-primary text-white'} px-3 py-2 rounded-pill small fw-bold`}>
+                      {task.status}
+                    </span>
+                  </div>
+                  
+                  <div className="mt-auto d-flex gap-2 pt-3 border-top border-white border-opacity-10">
+                    <button 
+                      className={`btn btn-sm ${task.status === 'COMPLETED' ? 'btn-outline-warning' : 'btn-outline-success'} flex-grow-1 fw-bold border-0 bg-opacity-10`} 
+                      style={{ background: task.status === 'COMPLETED' ? 'rgba(255, 193, 7, 0.1)' : 'rgba(25, 135, 84, 0.1)' }}
+                      onClick={() => toggleTask(task.id)}
+                    >
+                      {task.status === 'COMPLETED' ? 'Undo' : 'Complete'}
+                    </button>
+                    <button className="btn btn-sm btn-outline-light flex-grow-1 fw-bold border-0" style={{ background: 'rgba(255, 255, 255, 0.05)' }} onClick={() => { setEditTask(task); setShowModal(true); }}>
+                      Edit
+                    </button>
+                    <button className="btn btn-sm btn-outline-danger flex-grow-1 fw-bold border-0" style={{ background: 'rgba(220, 53, 69, 0.1)' }} onClick={() => deleteTask(task.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-12 text-center py-5">
+              <div className="glass-card p-5">
+                <p className="text-secondary fs-5 mb-0">You're all caught up! No tasks found here.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered contentClassName="glass-card border-0" dialogClassName="modal-dark">
+        <Modal.Header closeButton closeVariant="white" className="border-0 px-4 pt-4 pb-0">
+          <Modal.Title className="fw-bold text-white fs-4" style={{ fontFamily: 'Outfit' }}>
+            {editTask ? 'Update Task' : 'Add New Task'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4">
+          <TaskForm 
+            onSuccess={() => setShowModal(false)}
+            initialValues={editTask}
+          />
+        </Modal.Body>
+      </Modal>
+
+      <style jsx>{`
+        .transition-standard {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .transition-standard:hover {
+          transform: scale(1.02);
+          background: rgba(30, 41, 59, 0.9);
+          border-color: rgba(99, 102, 241, 0.3);
+        }
+      `}</style>
+    </div>
+  );
+}
